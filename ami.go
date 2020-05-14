@@ -61,10 +61,13 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 	a.eventsChan = make(chan map[string]string, 4096)
 	a.pingerChan = make(chan struct{})
 
+	fmt.Println("Trying to connect...")
+
 	go func() {
 		for {
 			func() {
 				a.id = nextID()
+				fmt.Println(a.id)
 				var err error
 				var conn net.Conn
 				readErrChan := make(chan error)
@@ -74,6 +77,7 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 				for {
 					conn, err = a.openConnection()
 					if err == nil {
+						fmt.Println("connection opened!")
 						defer conn.Close()
 						greetings := make([]byte, 100)
 						n, err := conn.Read(greetings)
@@ -94,10 +98,12 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 							greetings = greetings[:n-2]
 						}
 
+						fmt.Println("it'll emit an event")
 						go a.emitEvent("connect", string(greetings))
 						break
 					}
 
+					fmt.Println("an error ocorr: ", err)
 					a.emitEvent("error", "AMI Reconnect failed")
 					time.Sleep(s.ReconnectInterval)
 					return
@@ -112,11 +118,13 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 					go a.pinger(chanStop, pingErrChan)
 				}
 
+				fmt.Println("it'll stop here...")
 				select {
 				case err = <-readErrChan:
 				case err = <-writeErrChan:
 				case err = <-pingErrChan:
 				}
+				fmt.Println("now will stop")
 
 				close(chanStop)
 				a.mutex.Lock()

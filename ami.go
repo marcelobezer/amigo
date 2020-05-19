@@ -277,7 +277,7 @@ func (a *amiAdapter) exec(action map[string]string) map[string]string {
 
 func (a *amiAdapter) login(conn net.Conn) error {
 	var action = map[string]string{
-		"Action":   "Login",
+		"Action":   "login",
 		"Username": a.username,
 		"Secret":   a.password,
 	}

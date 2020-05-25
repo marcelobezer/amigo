@@ -98,13 +98,12 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 							greetings = greetings[:n-2]
 						}
 
-						fmt.Println("it'll emit an event")
 						go a.emitEvent("connect", string(greetings))
 						break
 					}
 
 					fmt.Println("an error ocorr: ", err)
-					a.emitEvent("error", "AMI Reconnect failed")
+					a.emitEvent("error", "AMI connecting failed")
 					time.Sleep(s.ReconnectInterval)
 					return
 				}
@@ -118,13 +117,11 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 					go a.pinger(chanStop, pingErrChan)
 				}
 
-				fmt.Println("it'll stop here...")
 				select {
 				case err = <-readErrChan:
 				case err = <-writeErrChan:
 				case err = <-pingErrChan:
 				}
-				fmt.Println("now will stop")
 
 				close(chanStop)
 				a.mutex.Lock()

@@ -35,9 +35,10 @@ type amiAdapter struct {
 	username   string
 	password   string
 
-	connected     bool
-	actionTimeout time.Duration
-	dialTimeout   time.Duration
+	connected        bool
+	actionTimeout    time.Duration
+	dialTimeout      time.Duration
+	shouldDisconnect bool
 
 	actionsChan   chan map[string]string
 	responseChans map[string]chan map[string]string
@@ -61,13 +62,10 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 	a.eventsChan = make(chan map[string]string, 4096)
 	a.pingerChan = make(chan struct{})
 
-	fmt.Println("Trying to connect...")
-
 	go func() {
 		for {
 			func() {
 				a.id = nextID()
-				fmt.Println(a.id)
 				var err error
 				var conn net.Conn
 				readErrChan := make(chan error)
@@ -77,7 +75,6 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 				for {
 					conn, err = a.openConnection()
 					if err == nil {
-						fmt.Println("connection opened!")
 						defer conn.Close()
 						greetings := make([]byte, 100)
 						n, err := conn.Read(greetings)
@@ -102,8 +99,7 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 						break
 					}
 
-					fmt.Println("an error ocorr: ", err)
-					a.emitEvent("error", "AMI connecting failed")
+					a.emitEvent("error", "AMI connecting failed: "+err.Error())
 					time.Sleep(s.ReconnectInterval)
 					return
 				}
@@ -131,8 +127,22 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 				go a.emitEvent("error", fmt.Sprintf("AMI TCP ERROR: %s", err.Error()))
 				time.Sleep(s.ReconnectInterval)
 			}()
+
+			if a.shouldDisconnect {
+				break
+			}
 		}
 	}()
+
+	// need to wait some time until connection
+	// is set upped
+	for !a.connected {
+		a.On("error", func(message string) {
+			return a, errors.New(message)
+		})
+
+		time.Sleep(time.Millisecond * 200)
+	}
 
 	return a, nil
 }
@@ -173,6 +183,10 @@ func (a *amiAdapter) pinger(stop <-chan struct{}, errChan chan error) {
 		case <-timer.C:
 			errChan <- errors.New("ping timeout")
 			return
+		}
+
+		if a.shouldDisconnect {
+			break
 		}
 	}
 }
@@ -366,6 +380,10 @@ func readMessage(r *bufio.Reader) (m map[string]string, err error) {
 		if err != nil {
 			return m, err
 		}
+
+		if a.shouldDisconnect {
+			break
+		}
 	}
 }
 
@@ -400,6 +418,10 @@ func (a *amiAdapter) reader(conn net.Conn, stop <-chan struct{}, readErrChan cha
 			event["#"] = strconv.Itoa(i)
 			event["TimeReceived"] = time.Now().Format(time.RFC3339Nano)
 			chanEvents <- event
+
+			if a.shouldDisconnect {
+				break
+			}
 		}
 	}()
 
@@ -418,5 +440,15 @@ func (a *amiAdapter) reader(conn net.Conn, stop <-chan struct{}, readErrChan cha
 		case event := <-chanEvents:
 			a.distribute(event)
 		}
+
+		if a.shouldDisconnect {
+			break
+		}
 	}
+}
+
+func (a *amiAdapter) disconnect() {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+	a.shouldDisconnect = true
 }

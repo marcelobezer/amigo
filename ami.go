@@ -134,6 +134,22 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 		}
 	}()
 
+	startTryTime := time.Now()
+
+	// need to wait some time until connection
+	// is set upped
+	for !a.connected {
+		a.On("error", func(message string) {
+			return a, errors.New(message)
+		})
+
+		time.Sleep(time.Millisecond * 200)
+
+		if time.Since(startTryTime) > 1*time.Minute {
+			return a, erros.New("Conection request is taking too long")
+		}
+	}
+
 	return a, nil
 }
 

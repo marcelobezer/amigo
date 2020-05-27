@@ -145,7 +145,7 @@ func newAMIAdapter(s *Settings, eventEmitter func(string, string)) (*amiAdapter,
 
 		time.Sleep(time.Millisecond * 200)
 
-		if time.Since(startTryTime) > 1*time.Minute {
+		if time.Since(startTryTime) > 5*time.Second {
 			return a, erros.New("Conection request is taking too long")
 		}
 	}
